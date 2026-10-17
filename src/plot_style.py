@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import matplotlib as mpl
-import matplotlib.pyplot as plt
 
 FIG_DIR = Path(__file__).resolve().parents[1] / "results" / "figures"
 

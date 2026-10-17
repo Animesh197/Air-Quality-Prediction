@@ -14,3 +14,14 @@ __pycache__/
 # Regenerable data outputs
 data/processed/*
 !data/processed/.gitkeep
+
+# LaTeX build artifacts (report/)
+report/*.aux
+report/*.bbl
+report/*.blg
+report/*.log
+report/*.out
+report/*.nav
+report/*.snm
+report/*.toc
+report/*.synctex.gz
