@@ -22,6 +22,26 @@ def metrics(y_true, y_pred):
             "R2": r2_score(y_true, y_pred)}
 
 
+def diebold_mariano(e1, e2, loss="squared", max_lag=24):
+    """Diebold-Mariano test of equal predictive accuracy (Diebold & Mariano, 1995).
+
+    d_t = L(e1_t) - L(e2_t). The variance of mean(d) uses a Newey-West (Bartlett)
+    long-run variance with `max_lag` lags, because hourly loss differentials are
+    autocorrelated. Negative statistic => model 1 has lower loss.
+    Returns (DM statistic, two-sided p-value from the normal approximation).
+    """
+    from scipy.stats import norm
+    e1, e2 = np.asarray(e1, float), np.asarray(e2, float)
+    f = np.square if loss == "squared" else np.abs
+    d = f(e1) - f(e2)
+    n, dc = len(d), d - d.mean()
+    lrv = dc @ dc / n
+    for k in range(1, max_lag + 1):
+        lrv += 2 * (1 - k / (max_lag + 1)) * (dc[k:] @ dc[:-k]) / n
+    stat = d.mean() / np.sqrt(lrv / n)
+    return float(stat), float(2 * norm.sf(abs(stat)))
+
+
 def score_by_split(y, preds, split, mask, splits):
     """Metrics per (model, split) on the common eval set. `preds` maps name -> Series."""
     rows = []

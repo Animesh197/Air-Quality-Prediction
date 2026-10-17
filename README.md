@@ -40,6 +40,7 @@ Run in order from `notebooks/`:
 4. `04_features.ipynb`: builds the 37-feature matrix and runs alignment and leakage tests.
 5. `05_baselines.ipynb`: persistence and seasonal-naive baselines on train/validation; writes `results/predictions/` and `results/metrics/`.
 6. `06_xgboost.ipynb`: XGBoost target formulation, hyperparameter search on 2013 folds, feature importance (≈ 2.5 min).
+7. `07_backtest.ipynb`: final 2014 test evaluation (monthly expanding-window backtest), significance test and error analysis.
 
 Headless: `.venv/bin/jupyter nbconvert --to notebook --execute --inplace notebooks/<name>.ipynb`
 
@@ -61,16 +62,19 @@ requirements.txt    pinned Phase 1 dependencies
 1-hour-ahead PM2.5, issued at the end of hour *t* using only data up to *t*. Splits by target hour: train 2010–2012, validation 2013, test 2014. Defined in `src/protocol.py`.
 
 ## Results
-Validation 2013, common eval set (test year not yet scored). XGBoost predictions come from the expanding-window quarterly folds:
+1-hour-ahead PM2.5 (µg/m³), common eval set. Test = 2014, scored once with the configuration frozen after tuning on 2013:
 
-| Model | MAE | RMSE | R² |
-|---|---|---|---|
-| Persistence | 13.18 | 24.87 | 0.936 |
-| Seasonal-naive 24 h | 76.08 | 110.18 | −0.260 |
-| XGBoost (change target, tuned on 2013 folds) | 12.26 | 22.53 | 0.947 |
+| Model | Val 2013 MAE / RMSE / R² | **Test 2014 MAE / RMSE / R²** |
+|---|---|---|
+| Persistence | 13.18 / 24.87 / 0.936 | 11.93 / 22.03 / 0.944 |
+| Seasonal-naive 24 h | 76.08 / 110.18 / −0.260 | 67.30 / 98.75 / −0.121 |
+| XGBoost (change target) | 12.26 / 22.53 / 0.947 | **10.96 / 19.96 / 0.954** |
+
+On the test year XGBoost reduces MAE by 8.1% and RMSE by 9.4% relative to persistence, is better in all 12 months, and the difference is significant (Diebold–Mariano p < 10⁻⁶). Details: `EXPERIMENT_RESULTS.md` (local) and `results/metrics/`.
 
 ## Limitations
 - Dataset provenance verified by content only, not by an official checksum.
 - PM2.5 has gaps of up to 155 hours, and more missing data in 2010–2012 than in 2013–2014.
 - `wind_cum`, `snow_cum` and `rain_cum` are cumulative, not hourly readings; `snow_cum`/`rain_cum` contain a few skipped increments.
-- On validation, XGBoost does not beat persistence for the most extreme hours (true PM2.5 > 250 µg/m³).
+- XGBoost does not beat persistence on the most extreme hours (true PM2.5 > 250 µg/m³; test RMSE 42.0 vs 41.6) and under-predicts them. It also fails to anticipate sudden large rises.
+- Single station, single test year; inputs use only observed weather (no weather forecasts).

@@ -1,0 +1,7 @@
+comparison,loss,DM,p-value
+xgboost vs persistence,squared,-5.099447410862476,3.406464940196857e-07
+xgboost vs persistence,absolute,-8.636325333914552,5.805004497541177e-18
+xgboost vs seasonal-naive,squared,-9.737392874025275,2.0884355554110186e-22
+xgboost vs seasonal-naive,absolute,-20.664667850242665,7.205107981489406e-95
+persistence vs seasonal-naive,squared,-9.669204572518414,4.0753317378935206e-22
+persistence vs seasonal-naive,absolute,-20.384406527573365,2.299886905192658e-92
