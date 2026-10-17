@@ -32,6 +32,24 @@ def score_by_split(y, preds, split, mask, splits):
     return pd.DataFrame(rows)
 
 
+def backtest(make_model, X, y, mask, folds):
+    """Expanding-window backtest: refit `make_model()` per fold on targets before the fold.
+
+    Training uses every row with an observed target up to the fold's `train_end`
+    (the model decides which of those it can use); scoring uses the common eval
+    set inside the fold's test window. Returns (per-fold metrics, predictions).
+    """
+    rows, preds = [], []
+    for f in folds:
+        train, test = fold_masks(X.index, f)
+        model = make_model().fit(X[train], y[train])
+        p = model.predict(X[test & mask])
+        preds.append(p)
+        rows.append({"fold": f["fold"], "test_start": f["test_start"].date(), "test_end": f["test_end"].date(),
+                     "n_train": model.n_train_, **metrics(y[test & mask], p)})
+    return pd.DataFrame(rows), pd.concat(preds)
+
+
 def score_by_fold(y, preds, mask, folds):
     """Metrics per (model, fold) on the common eval set of each fold's test window."""
     rows = []

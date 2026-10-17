@@ -1,0 +1,15 @@
+{
+  "formulation": "delta",
+  "objective": "reg:squarederror",
+  "tree_method": "hist",
+  "random_state": 0,
+  "max_depth": 6,
+  "learning_rate": 0.02,
+  "n_estimators": 800,
+  "min_child_weight": 10,
+  "subsample": 0.85,
+  "colsample_bytree": 0.6,
+  "reg_lambda": 5,
+  "selection": "lowest mean RMSE over 4 expanding-window folds (2013 quarters)",
+  "xgboost_version": "3.2.0"
+}
