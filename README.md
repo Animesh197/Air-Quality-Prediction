@@ -35,15 +35,16 @@ Run notebooks with `.venv/bin/jupyter lab` and select the **Python 3.11 (air-qua
 ## Execution
 Run in order from `notebooks/`:
 1. `01_data_quality.ipynb`: loads and validates the raw data (integrity hash, timestamps, missingness, suspicious values).
+2. `02_eda.ipynb`: exploratory analysis; writes figures to `results/figures/eda_*.png`.
 
-Headless: `.venv/bin/jupyter nbconvert --to notebook --execute --inplace notebooks/01_data_quality.ipynb`
+Headless: `.venv/bin/jupyter nbconvert --to notebook --execute --inplace notebooks/<name>.ipynb`
 
 ## Project structure
 ```
 data/raw/           raw dataset (never modified)
 data/processed/     regenerable intermediate data (git-ignored)
 notebooks/          stage notebooks (data quality, EDA, ...)
-src/                reusable loading / feature / evaluation code
+src/                reusable code (data.py: load/validate; plot_style.py: figure style)
 results/figures/    saved plots
 results/metrics/    saved metric tables
 requirements.txt    pinned Phase 1 dependencies
