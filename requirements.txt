@@ -1,0 +1,12 @@
+# Phase 1 dependencies (Python 3.11). Versions verified in .venv on 2026-10-17.
+# macOS: xgboost also needs the OpenMP runtime -> `brew install libomp`
+pandas==3.0.6
+numpy==2.4.6
+scipy==1.17.1
+matplotlib==3.11.2
+seaborn==0.13.2
+scikit-learn==1.9.1
+statsmodels==0.15.0
+xgboost==3.2.0
+jupyterlab==4.6.4
+ipykernel==7.4.0

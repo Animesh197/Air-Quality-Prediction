@@ -1,1 +1,16 @@
 note.txt
+
+# Local-only project docs (README.md stays tracked)
+IMPLEMENTATION_LOG.md
+LEARNING_NOTES.md
+EXPERIMENT_RESULTS.md
+
+# Environment and tooling
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
+
+# Regenerable data outputs
+data/processed/*
+!data/processed/.gitkeep
