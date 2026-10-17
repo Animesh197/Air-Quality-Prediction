@@ -38,6 +38,7 @@ Run in order from `notebooks/`:
 2. `02_eda.ipynb`: exploratory analysis; writes figures to `results/figures/eda_*.png`.
 3. `03_protocol.ipynb`: forecasting protocol (target, splits, backtest folds, missing-value policy) with leakage checks.
 4. `04_features.ipynb`: builds the 37-feature matrix and runs alignment and leakage tests.
+5. `05_baselines.ipynb`: persistence and seasonal-naive baselines on train/validation; writes `results/predictions/` and `results/metrics/`.
 
 Headless: `.venv/bin/jupyter nbconvert --to notebook --execute --inplace notebooks/<name>.ipynb`
 
@@ -47,7 +48,8 @@ data/raw/           raw dataset (never modified)
 data/processed/     regenerable intermediate data (git-ignored)
 notebooks/          stage notebooks (data quality, EDA, ...)
 src/                reusable code (data.py: load/validate; protocol.py: target/splits/folds;
-                    features.py: feature matrix; plot_style.py: figure style)
+                    features.py: feature matrix; baselines.py; evaluate.py: metrics;
+                    plot_style.py: figure style)
 results/figures/    saved plots
 results/metrics/    saved metric tables
 requirements.txt    pinned Phase 1 dependencies
@@ -57,7 +59,12 @@ requirements.txt    pinned Phase 1 dependencies
 1-hour-ahead PM2.5, issued at the end of hour *t* using only data up to *t*. Splits by target hour: train 2010–2012, validation 2013, test 2014. Defined in `src/protocol.py`.
 
 ## Results
-No models have been run yet.
+Validation 2013, common eval set (test year not yet scored):
+
+| Model | MAE | RMSE | R² |
+|---|---|---|---|
+| Persistence | 13.18 | 24.87 | 0.936 |
+| Seasonal-naive 24 h | 76.08 | 110.18 | −0.260 |
 
 ## Limitations
 - Dataset provenance verified by content only, not by an official checksum.
