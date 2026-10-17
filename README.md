@@ -37,6 +37,7 @@ Run in order from `notebooks/`:
 1. `01_data_quality.ipynb`: loads and validates the raw data (integrity hash, timestamps, missingness, suspicious values).
 2. `02_eda.ipynb`: exploratory analysis; writes figures to `results/figures/eda_*.png`.
 3. `03_protocol.ipynb`: forecasting protocol (target, splits, backtest folds, missing-value policy) with leakage checks.
+4. `04_features.ipynb`: builds the 37-feature matrix and runs alignment and leakage tests.
 
 Headless: `.venv/bin/jupyter nbconvert --to notebook --execute --inplace notebooks/<name>.ipynb`
 
@@ -45,7 +46,8 @@ Headless: `.venv/bin/jupyter nbconvert --to notebook --execute --inplace noteboo
 data/raw/           raw dataset (never modified)
 data/processed/     regenerable intermediate data (git-ignored)
 notebooks/          stage notebooks (data quality, EDA, ...)
-src/                reusable code (data.py: load/validate; protocol.py: target/splits/folds; plot_style.py: figure style)
+src/                reusable code (data.py: load/validate; protocol.py: target/splits/folds;
+                    features.py: feature matrix; plot_style.py: figure style)
 results/figures/    saved plots
 results/metrics/    saved metric tables
 requirements.txt    pinned Phase 1 dependencies
