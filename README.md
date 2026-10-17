@@ -4,8 +4,23 @@ Short-horizon (initially 1-hour-ahead) PM2.5 forecasting for Beijing using histo
 
 ## Dataset
 - File: `data/raw/dataset.csv` (read-only raw copy; SHA-256 `4127f868775e31b3956522adc0ec75af8937dde6a3896e8beed3a376c6d27f1c`).
-- Content matches the UCI "Beijing PM2.5 Data" set (US Embassy PM2.5 + Beijing Capital Airport weather, hourly, 2010-01-01 to 2014-12-31, 43,824 rows). Original download source not independently verified.
-- Columns: `No, year, month, day, hour, pm2.5, DEWP, TEMP, PRES, cbwd, Iws, Is, Ir`.
+- Content matches the UCI "Beijing PM2.5 Data" set: Chen, S. (2015), UCI Machine Learning Repository, doi:[10.24432/C5JS49](https://doi.org/10.24432/C5JS49), CC BY 4.0. PM2.5 from the US Embassy in Beijing; weather from Beijing Capital International Airport. Hourly, 2010-01-01 00:00 to 2014-12-31 23:00, 43,824 rows. Original download source not independently verified.
+- Introductory paper: Liang, X. et al. (2015), "Assessing Beijing's PM2.5 pollution: severity, weather impact, APEC and winter heating", *Proc. R. Soc. A*.
+
+### Data dictionary (as returned by `src.data.load_raw`)
+| Column | Raw name | Type | Unit | Description |
+|---|---|---|---|---|
+| `timestamp` (index) | year, month, day, hour | datetime | — | Hourly; assumed Beijing local time (UTC+8, no DST) |
+| `pm25` | pm2.5 | float | µg/m³ | PM2.5 concentration; 2,067 missing (4.7%) |
+| `dewp` | DEWP | int | °C | Dew point |
+| `temp` | TEMP | float | °C | Temperature |
+| `pres` | PRES | float | hPa | Pressure |
+| `wind_dir` | cbwd | category | — | Combined wind direction: NE, NW, SE, cv |
+| `wind_cum` | Iws | float | m/s | Cumulated wind speed; resets when `wind_dir` changes |
+| `snow_cum` | Is | int | hours | Cumulated hours of snow |
+| `rain_cum` | Ir | int | hours | Cumulated hours of rain |
+
+The raw `No` column (row number) is dropped.
 
 ## Setup (macOS, Python 3.11)
 ```bash
@@ -16,6 +31,12 @@ uv pip install --python .venv/bin/python -r requirements.txt
 .venv/bin/python -m ipykernel install --user --name air-quality-py311 --display-name "Python 3.11 (air-quality)"
 ```
 Run notebooks with `.venv/bin/jupyter lab` and select the **Python 3.11 (air-quality)** kernel.
+
+## Execution
+Run in order from `notebooks/`:
+1. `01_data_quality.ipynb`: loads and validates the raw data (integrity hash, timestamps, missingness, suspicious values).
+
+Headless: `.venv/bin/jupyter nbconvert --to notebook --execute --inplace notebooks/01_data_quality.ipynb`
 
 ## Project structure
 ```
@@ -33,3 +54,5 @@ No models have been run yet.
 
 ## Limitations
 - Dataset provenance verified by content only, not by an official checksum.
+- PM2.5 has gaps of up to 155 hours, and more missing data in 2010–2012 than in 2013–2014.
+- `wind_cum`, `snow_cum` and `rain_cum` are cumulative, not hourly readings; `snow_cum`/`rain_cum` contain a few skipped increments.
