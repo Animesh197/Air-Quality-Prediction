@@ -10,3 +10,4 @@ statsmodels==0.15.0
 xgboost==3.2.0
 jupyterlab==4.6.4
 ipykernel==7.4.0
+pytest>=8.0.0

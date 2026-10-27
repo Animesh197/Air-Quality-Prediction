@@ -38,6 +38,8 @@ def diebold_mariano(e1, e2, loss="squared", max_lag=24):
     lrv = dc @ dc / n
     for k in range(1, max_lag + 1):
         lrv += 2 * (1 - k / (max_lag + 1)) * (dc[k:] @ dc[:-k]) / n
+    if lrv <= 0:
+        return (0.0, 1.0) if np.isclose(d.mean(), 0.0) else (np.nan, np.nan)
     stat = d.mean() / np.sqrt(lrv / n)
     return float(stat), float(2 * norm.sf(abs(stat)))
 

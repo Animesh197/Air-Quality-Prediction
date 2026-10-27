@@ -54,7 +54,7 @@ def _calendar_features(index, horizon=HORIZON):
     return pd.DataFrame({
         "hour_sin": np.sin(2 * np.pi * tt.hour / 24), "hour_cos": np.cos(2 * np.pi * tt.hour / 24),
         "month_sin": np.sin(2 * np.pi * (tt.month - 1) / 12), "month_cos": np.cos(2 * np.pi * (tt.month - 1) / 12),
-        "dow": tt.dayofweek,
+        "dow": tt.day_of_week if hasattr(tt, "day_of_week") else tt.dayofweek,
     }, index=index)
 
 
