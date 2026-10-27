@@ -1,4 +1,4 @@
-# Air Quality Forecasting (Project 19)
+   # Air Quality Forecasting (Project 19)
 
 One-hour-ahead PM2.5 forecasting for Beijing from historical air-quality and weather data. **Phase 1 (machine learning)** compares persistence and seasonal-naive baselines with XGBoost under a leakage-controlled, chronological protocol. Phase 2 (LSTM) has not started.
 
