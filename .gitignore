@@ -8,8 +8,13 @@ EXPERIMENT_RESULTS.md
 # Environment and tooling
 .venv/
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
 .ipynb_checkpoints/
 .DS_Store
+**/.DS_Store
 
 # Regenerable data outputs
 data/processed/*
