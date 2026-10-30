@@ -22,6 +22,29 @@ def metrics(y_true, y_pred):
             "R2": r2_score(y_true, y_pred)}
 
 
+def directional_accuracy(y_true, y_pred, y_ref):
+    """Mean Directional Accuracy (MDA) relative to a reference level (e.g. pm(t)).
+
+    Measures the proportion of time the forecasted direction of change from y_ref
+    matches the actual direction of change: sign(y_pred - y_ref) == sign(y_true - y_ref).
+    """
+    y_true, y_pred, y_ref = np.asarray(y_true, float), np.asarray(y_pred, float), np.asarray(y_ref, float)
+    if np.isnan(y_true).any() or np.isnan(y_pred).any() or np.isnan(y_ref).any():
+        raise ValueError("NaN in inputs: score only on the common eval set")
+    actual_dir = np.sign(y_true - y_ref)
+    pred_dir = np.sign(y_pred - y_ref)
+    return float(np.mean(actual_dir == pred_dir))
+
+
+def symmetric_mape(y_true, y_pred, eps=1e-8):
+    """Symmetric Mean Absolute Percentage Error (sMAPE) in percent (0..100%)."""
+    y_true, y_pred = np.asarray(y_true, float), np.asarray(y_pred, float)
+    if np.isnan(y_true).any() or np.isnan(y_pred).any():
+        raise ValueError("NaN in inputs: score only on the common eval set")
+    denom = (np.abs(y_true) + np.abs(y_pred)) / 2.0 + eps
+    return float(100.0 * np.mean(np.abs(y_pred - y_true) / denom))
+
+
 def diebold_mariano(e1, e2, loss="squared", max_lag=24):
     """Diebold-Mariano test of equal predictive accuracy (Diebold & Mariano, 1995).
 

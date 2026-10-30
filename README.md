@@ -51,6 +51,21 @@ Reproduce everything headless (≈ 3.5 min):
 for nb in notebooks/0*.ipynb; do .venv/bin/jupyter nbconvert --to notebook --execute --inplace "$nb"; done
 ```
 
+### CLI Pipeline Runner
+You can also run the end-to-end forecasting pipeline or individual stages directly from the command line without Jupyter:
+```bash
+python3 -m src.pipeline --stage all         # Run data validation, baselines & XGBoost
+python3 -m src.pipeline --stage validate    # Validate raw data integrity and missingness
+python3 -m src.pipeline --stage baselines   # Evaluate persistence & seasonal-naive baselines
+python3 -m src.pipeline --stage xgboost     # Fit and score XGBoost on validation set
+```
+
+### Automated Testing
+Run the complete unit and integration test suite:
+```bash
+pytest tests -v
+```
+
 **Reproducibility check (Stage 09):** in a freshly built environment from `requirements.txt`, running all seven notebooks regenerated every file in `results/metrics/` and `results/predictions/` byte for byte, plus all 19 figures.
 
 ## Project structure
@@ -60,7 +75,9 @@ data/processed/         regenerable intermediate data (git-ignored; currently un
 notebooks/              stage notebooks 01–07
 src/                    data.py (load/validate), protocol.py (target/splits/folds),
                         features.py, baselines.py, models.py (XGBoost),
-                        evaluate.py (metrics, backtest, Diebold–Mariano), plot_style.py
+                        evaluate.py (metrics, backtest, Diebold–Mariano),
+                        pipeline.py (CLI runner), plot_style.py
+tests/                  automated unit and integration test suite (pytest)
 results/figures/        plots
 results/metrics/        metric tables and the selected XGBoost configuration (JSON)
 results/predictions/    saved predictions (train/val baselines, val XGBoost, test 2014)

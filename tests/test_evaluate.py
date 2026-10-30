@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from src.evaluate import metrics, diebold_mariano
+from src.evaluate import metrics, diebold_mariano, directional_accuracy, symmetric_mape
 
 
 def test_metrics_calculation():
@@ -38,3 +38,26 @@ def test_diebold_mariano_significant_difference():
     # Negative statistic indicates model 1 has lower loss
     assert stat < 0
     assert pval < 0.001
+
+
+def test_directional_accuracy():
+    # y_ref is pm(t)
+    y_ref = np.array([50.0, 50.0, 50.0, 50.0])
+    # true changes: +10, -10, 0, +5
+    y_true = np.array([60.0, 40.0, 50.0, 55.0])
+    # pred changes: +5 (correct), -5 (correct), +2 (incorrect), -2 (incorrect)
+    y_pred = np.array([55.0, 45.0, 52.0, 48.0])
+
+    mda = directional_accuracy(y_true, y_pred, y_ref)
+    # 2 out of 4 correct -> 0.5
+    assert np.isclose(mda, 0.5)
+
+
+def test_symmetric_mape():
+    y_true = np.array([100.0, 200.0])
+    y_pred = np.array([100.0, 200.0])
+    assert np.isclose(symmetric_mape(y_true, y_pred), 0.0)
+
+    y_pred_err = np.array([110.0, 190.0])
+    smape = symmetric_mape(y_true, y_pred_err)
+    assert 0 < smape < 100
