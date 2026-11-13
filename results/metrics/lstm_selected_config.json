@@ -1,0 +1,14 @@
+{
+  "lookback": 24,
+  "hidden": 64,
+  "layers": 2,
+  "dropout": 0.1,
+  "lr": 0.001,
+  "weight_decay": 0.0001,
+  "epochs": 40,
+  "formulation": "delta",
+  "seed": 0,
+  "val_MAE": 12.470882402434745,
+  "val_RMSE": 22.849217443827797,
+  "val_R2": 0.9457990623346963
+}
