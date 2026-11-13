@@ -11,3 +11,6 @@ xgboost==3.2.0
 jupyterlab==4.6.4
 ipykernel==7.4.0
 pytest>=8.0.0
+
+# Phase 2 (deep learning) dependency
+torch==2.15.0
