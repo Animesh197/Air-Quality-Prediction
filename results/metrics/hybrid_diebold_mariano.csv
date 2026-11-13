@@ -1,0 +1,3 @@
+comparison,loss,DM,p-value
+Hybrid vs XGBoost,squared,-0.599427212863278,0.548888034614752
+Hybrid vs XGBoost,absolute,-1.8174796145973813,0.06914370693510546
