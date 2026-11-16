@@ -1,6 +1,6 @@
    # Air Quality Forecasting (Project 19)
 
-One-hour-ahead PM2.5 forecasting for Beijing from historical air-quality and weather data. **Phase 1 (machine learning)** compares persistence and seasonal-naive baselines with XGBoost under a leakage-controlled, chronological protocol. Phase 2 (LSTM) has not started.
+One-hour-ahead PM2.5 forecasting for Beijing from historical air-quality and weather data. **Phase 1 (machine learning)** compares persistence and seasonal-naive baselines with XGBoost under a leakage-controlled, chronological protocol. **Phase 2 (deep learning)** adds an LSTM trained on raw hourly windows and an XGBoost–LSTM hybrid, evaluated under the *same* protocol and eval hours so all models are directly comparable.
 
 ## Dataset
 - File: `data/raw/dataset.csv` (read-only raw copy; SHA-256 `4127f868775e31b3956522adc0ec75af8937dde6a3896e8beed3a376c6d27f1c`, checked on every load).
@@ -33,6 +33,8 @@ uv pip install --python .venv/bin/python -r requirements.txt     # direct depend
 ```
 Run notebooks interactively with `.venv/bin/jupyter lab` and the **Python 3.11 (air-quality)** kernel.
 
+The Phase 2 LSTM uses PyTorch (`torch`, pinned in `requirements.txt`); the deep-learning notebooks run on the Apple GPU (Metal/MPS) when available and fall back to CPU automatically, so no extra setup is needed. GPU training is not perfectly deterministic, so the Phase 2 numbers can vary by a small amount between runs.
+
 ## Execution
 Run the notebooks in order:
 
@@ -45,10 +47,14 @@ Run the notebooks in order:
 | `05_baselines.ipynb` | 06 | Persistence and seasonal-naive on train/validation |
 | `06_xgboost.ipynb` | 07 | Target formulation, hyperparameter search on 2013 folds, feature importance (≈ 2.5 min) |
 | `07_backtest.ipynb` | 08 | Single 2014 test evaluation, Diebold–Mariano test, error analysis |
+| `08_dl_windows.ipynb` | 09 | Build 24-hour windowed input channels for the LSTM; future-perturbation leakage check; figure `dl_01` |
+| `09_lstm.ipynb` | 10 | LSTM tuning (12-configuration ablation over lookback × hidden × layers) on 2013; figure `dl_02` |
+| `10_lstm_backtest.ipynb` | 11 | Frozen-config monthly expanding-window backtest on 2014; Diebold–Mariano; figures `dl_03`–`dl_05` |
+| `11_hybrid.ipynb` | 12 | XGBoost–LSTM convex blend (weight fixed on 2013, frozen for 2014); figure `dl_06` |
 
-Reproduce everything headless (≈ 3.5 min):
+Phase 1 (notebooks 01–07) reproduces headless in ≈ 3.5 min. The Phase 2 notebooks (08–11) add PyTorch training and take longer. Run everything in order:
 ```bash
-for nb in notebooks/0*.ipynb; do .venv/bin/jupyter nbconvert --to notebook --execute --inplace "$nb"; done
+for nb in notebooks/*.ipynb; do .venv/bin/jupyter nbconvert --to notebook --execute --inplace "$nb"; done
 ```
 
 ### CLI Pipeline Runner
@@ -58,7 +64,10 @@ python3 -m src.pipeline --stage all         # Run data validation, baselines & X
 python3 -m src.pipeline --stage validate    # Validate raw data integrity and missingness
 python3 -m src.pipeline --stage baselines   # Evaluate persistence & seasonal-naive baselines
 python3 -m src.pipeline --stage xgboost     # Fit and score XGBoost on validation set
+python3 -m src.pipeline --stage lstm        # Fit the frozen-config LSTM and score it on validation
+python3 -m src.pipeline --stage hybrid      # Blend XGBoost + LSTM on validation (fits the blend weight)
 ```
+The `baselines`/`xgboost`/`lstm`/`hybrid` stages are quick 2013-validation checks that reuse the frozen configurations and print metric tables; they write no files. The full 2014 backtests live in notebooks 07/10/11. The `lstm` and `hybrid` stages are explicit opt-in (not part of `all`) and require PyTorch.
 
 ### Automated Testing
 Run the complete unit and integration test suite:
@@ -66,22 +75,24 @@ Run the complete unit and integration test suite:
 pytest tests -v
 ```
 
-**Reproducibility check (Stage 09):** in a freshly built environment from `requirements.txt`, running all seven notebooks regenerated every file in `results/metrics/` and `results/predictions/` byte for byte, plus all 19 figures.
+**Reproducibility check:** in a freshly built environment from `requirements.txt`, running the seven Phase 1 notebooks (01–07) regenerated every corresponding file in `results/metrics/` and `results/predictions/` byte for byte, plus their 19 figures. The Phase 2 notebooks (08–11) are not byte-for-byte reproducible because GPU (MPS) training is not perfectly deterministic; their metrics and the `dl_*` figures can vary by a small amount between runs.
 
 ## Project structure
 ```
 data/raw/               raw dataset (never modified)
 data/processed/         regenerable intermediate data (git-ignored; currently unused)
-notebooks/              stage notebooks 01–07
+notebooks/              stage notebooks 01–11 (01–07 Phase 1, 08–11 Phase 2)
 src/                    data.py (load/validate), protocol.py (target/splits/folds),
                         features.py, baselines.py, models.py (XGBoost),
+                        windows.py (LSTM input sequences), dl_models.py (LSTM),
+                        hybrid.py (XGBoost–LSTM blend),
                         evaluate.py (metrics, backtest, Diebold–Mariano),
                         pipeline.py (CLI runner), plot_style.py
 tests/                  automated unit and integration test suite (pytest)
-results/figures/        plots
-results/metrics/        metric tables and the selected XGBoost configuration (JSON)
-results/predictions/    saved predictions (train/val baselines, val XGBoost, test 2014)
-report/                 IEEE report (main.tex, references.bib) and Beamer slides (slides.tex)
+results/figures/        plots (eda_*, xgb_*, test_* for Phase 1; dl_* for Phase 2)
+results/metrics/        metric tables plus the selected XGBoost, LSTM and hybrid configs (JSON)
+results/predictions/    saved predictions (baselines, XGBoost, LSTM and hybrid test 2014)
+report/                 IEEE reports (main.tex Phase 1, phase2.tex Phase 2), references.bib, Beamer slides (slides.tex)
 requirements.txt        direct dependencies (pinned)
 requirements-lock.txt   full pinned environment
 ```
@@ -96,6 +107,8 @@ requirements-lock.txt   full pinned environment
 Defined in `src/protocol.py`.
 
 ## Results
+
+### Phase 1 (machine learning): XGBoost vs. baselines
 1-hour-ahead PM2.5 (µg/m³), common eval set. The 2014 test year was scored once, with the configuration frozen after tuning on 2013:
 
 | Model | Val 2013 MAE / RMSE / R² | **Test 2014 MAE / RMSE / R²** |
@@ -110,10 +123,27 @@ Defined in `src/protocol.py`.
 
 Full tables are in `results/metrics/`.
 
+### Phase 2 (deep learning): LSTM and hybrid
+Same task, protocol and common eval hours as Phase 1. The LSTM (24-hour window, 2 layers, 64 hidden units, change target) was tuned on 2013 (validation MAE 12.47 µg/m³) and the XGBoost–LSTM hybrid weight (0.63 XGBoost / 0.37 LSTM) was fixed on 2013; both were then frozen and scored once on 2014:
+
+| Model | **Test 2014 MAE / RMSE / R²** |
+|---|---|
+| Persistence | 11.93 / 22.03 / 0.944 |
+| XGBoost (change target) | 10.96 / 19.96 / 0.954 |
+| LSTM | 11.28 / 20.49 / 0.952 |
+| **Hybrid (0.63 XGB + 0.37 LSTM)** | **10.90 / 19.89 / 0.955** |
+
+- The LSTM beats persistence significantly (Diebold–Mariano p ≈ 3 × 10⁻⁸, squared loss) but does not overtake the tuned XGBoost (DM p ≈ 2 × 10⁻⁵, absolute loss).
+- The hybrid gives the best overall test scores and improves most at high pollution, but its edge over XGBoost alone is small and not statistically significant (DM p = 0.55 squared, 0.07 absolute).
+- No model solves the extreme band (> 250 µg/m³): all three have test RMSE near 42 µg/m³.
+
+Phase 2 tables are in `results/metrics/` (`lstm_*`, `hybrid_*`); the full write-up is `report/phase2.tex`.
+
 ## Report and slides
-`report/main.tex` (IEEEtran) and `report/slides.tex` (Beamer) read figures from `../results/figures/`. Compile from `report/`:
+`report/main.tex` (Phase 1), `report/phase2.tex` (Phase 2) and `report/slides.tex` (Beamer) all read figures from `../results/figures/`. Both reports are IEEEtran. Compile from `report/`:
 ```bash
 pdflatex main && bibtex main && pdflatex main && pdflatex main
+pdflatex phase2 && bibtex phase2 && pdflatex phase2 && pdflatex phase2
 pdflatex slides && pdflatex slides
 ```
 LaTeX is not installed in the development environment, so the documents have **not been compiled here**; references, figure paths and structure were checked programmatically. On Overleaf, upload `report/` together with `results/figures/` and keep the relative path.
@@ -125,3 +155,5 @@ LaTeX is not installed in the development environment, so the documents have **n
 - XGBoost does not beat persistence on the most extreme hours (true PM2.5 > 250 µg/m³; test RMSE 42.0 vs 41.6) and under-predicts them. It also fails to anticipate sudden large rises.
 - Single station and single test year; inputs use only observed weather (no weather forecasts).
 - The Diebold–Mariano p-values are approximate: the test slightly over-rejected (≈ 8% at a nominal 5%) in a simulation with autocorrelated errors.
+- Phase 2: the LSTM was tuned on a single 2013 validation year (not Phase 1's four folds) to keep deep-learning training affordable, and GPU (MPS) training is not perfectly deterministic, so its numbers can shift slightly between runs.
+- Phase 2: the hybrid's improvement over XGBoost alone is not statistically significant, and learning from raw history did not overtake the hand-engineered features at this one-hour horizon.

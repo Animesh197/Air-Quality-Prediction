@@ -1,18 +1,26 @@
 """End-to-end command-line pipeline for Air Quality Forecasting.
 
-Allows running validation, feature generation, baseline models, and XGBoost
-forecasting directly from the terminal without Jupyter notebooks.
+Allows running validation, feature generation, baseline models, XGBoost,
+and the Phase 2 LSTM / XGBoost-LSTM hybrid directly from the terminal
+without Jupyter notebooks.
 
 Usage:
     python3 -m src.pipeline --stage all
     python3 -m src.pipeline --stage validate
     python3 -m src.pipeline --stage baselines
     python3 -m src.pipeline --stage xgboost
+    python3 -m src.pipeline --stage lstm
+    python3 -m src.pipeline --stage hybrid
+
+The baselines/xgboost/lstm/hybrid stages are quick 2013-validation checks that
+reuse the frozen configurations and print metric tables; they write no files.
+The full 2014 backtests live in notebooks 07/10/11.
 """
 
 import argparse
 import sys
 import time
+from pathlib import Path
 import pandas as pd
 
 from src.data import RAW_PATH, load_raw, validate, missing_runs
@@ -21,6 +29,10 @@ from src.features import build_features
 from src.baselines import persistence, seasonal_naive
 from src.evaluate import metrics, directional_accuracy, symmetric_mape, diebold_mariano
 from src.models import XGBForecaster
+
+ROOT = Path(__file__).resolve().parent.parent
+METRICS_DIR = ROOT / "results" / "metrics"
+PRED_DIR = ROOT / "results" / "predictions"
 
 
 def run_validation(data_path=RAW_PATH, verbose=True):
@@ -147,13 +159,159 @@ def run_xgboost(df, X=None, verbose=True):
     return table
 
 
+def _lstm_val_split(df):
+    """Build the LSTM window dataset and the train / common-2013-eval masks.
+
+    Returns (X, y, pm_t, tr, ve, index, cfg): the window tensor, the t+1 target,
+    the pm(t) baseline value, boolean masks for training rows and the 2013 common
+    evaluation rows, the issuance index, and the frozen LSTM config. Mirrors the
+    masking in notebooks 09 and 11 exactly so results line up. (Lazy imports keep
+    the torch dependency out of the other stages.)
+    """
+    import json
+    import numpy as np
+    from src import windows as W
+
+    cfg_path = METRICS_DIR / "lstm_selected_config.json"
+    if not cfg_path.exists():
+        raise FileNotFoundError(
+            f"Frozen LSTM config not found: {cfg_path}. Run notebook 09_lstm first."
+        )
+    cfg = json.loads(cfg_path.read_text())
+
+    X, y, split, mask, _ = W.build_sequence_dataset(df, lookback=cfg["lookback"])
+    pm_t = df["pm25"].ffill().reindex(mask.index).to_numpy("float32")
+    sp, mk = split.to_numpy(), mask.to_numpy()
+    tr = (sp == "train") & ~np.isnan(y) & ~np.isnan(pm_t)   # observed target and pm(t)
+    ve = (sp == "val") & mk                                 # common 2013 eval set
+    return X, y, pm_t, tr, ve, mask.index, cfg
+
+
+def run_lstm(df, verbose=True):
+    """Fit the frozen-config LSTM on 2010-2012 and evaluate on the 2013 validation split.
+
+    Reuses results/metrics/lstm_selected_config.json (no re-tuning). Writes no files;
+    the full 2014 backtest is notebook 10. GPU (MPS) training is not perfectly
+    deterministic, so the MAE can differ slightly from the frozen tuning value.
+    """
+    from src.dl_models import LSTMForecaster
+
+    if verbose:
+        print("=" * 60)
+        print("STAGE: LSTM TRAINING & EVALUATION")
+        print("=" * 60)
+
+    X, y, pm_t, tr, ve, _, cfg = _lstm_val_split(df)
+    params = {k: cfg[k] for k in
+              ["formulation", "hidden", "layers", "dropout", "lr", "weight_decay", "epochs", "seed"]}
+
+    if verbose:
+        print(f"Fitting LSTMForecaster(lookback={cfg['lookback']}, hidden={cfg['hidden']}, "
+              f"layers={cfg['layers']}) on 2010-2012 training data...")
+    t0 = time.time()
+    model = LSTMForecaster(**params)
+    model.fit(X[tr], y[tr], pm_t[tr])
+    fit_time = time.time() - t0
+
+    pred_lstm = model.predict(X[ve], pm_t[ve])
+    y_val = y[ve]
+    pm_val = pm_t[ve]                        # pm(t) is the persistence forecast of x(t+1)
+
+    res_lstm = evaluate_model("LSTM", y_val, pred_lstm, pm_val)
+    res_persist = evaluate_model("Persistence", y_val, pm_val, pm_val)
+
+    dm_stat, p_val = diebold_mariano(y_val - pred_lstm, y_val - pm_val, loss="squared")
+
+    table = pd.DataFrame([res_persist, res_lstm])[["Model", "n", "MAE", "RMSE", "R2", "MDA (%)", "sMAPE (%)"]]
+    if verbose:
+        print(f"Trained on {int(tr.sum()):,} windows in {fit_time:.2f}s "
+              f"(device: {model.device_.type}).")
+        print("\nValidation 2013 Performance (Common Evaluation Set):")
+        print(table.to_string(index=False))
+        print(f"\nDiebold-Mariano test (squared loss, LSTM vs persistence): "
+              f"stat = {dm_stat:.3f}, p-value = {p_val:.2e}")
+        mae_imp = (res_persist["MAE"] - res_lstm["MAE"]) / res_persist["MAE"] * 100.0
+        rmse_imp = (res_persist["RMSE"] - res_lstm["RMSE"]) / res_persist["RMSE"] * 100.0
+        print(f"LSTM improvement over persistence: MAE {mae_imp:+.2f}%, RMSE {rmse_imp:+.2f}%")
+        print(f"(Frozen tuning value from notebook 09: val MAE {cfg['val_MAE']:.3f}; "
+              f"GPU runs vary slightly.)\n")
+    return table
+
+
+def run_hybrid(df, verbose=True):
+    """Blend the XGBoost and LSTM forecasts on the 2013 validation split.
+
+    Recomputes the LSTM validation forecast and joins it with the saved XGBoost
+    validation-fold predictions (results/predictions/xgb_val_folds.csv), then fits
+    the convex blend weight by least squares exactly as notebook 11 does. Writes no
+    files; the frozen weight and 2014 test are in results/metrics/hybrid_weight.json
+    and notebook 11.
+    """
+    import json
+    import numpy as np
+    from src.dl_models import LSTMForecaster
+    from src.hybrid import best_blend_weight, blend
+
+    if verbose:
+        print("=" * 60)
+        print("STAGE: HYBRID (XGBOOST + LSTM) EVALUATION")
+        print("=" * 60)
+
+    X, y, pm_t, tr, ve, index, cfg = _lstm_val_split(df)
+    params = {k: cfg[k] for k in
+              ["formulation", "hidden", "layers", "dropout", "lr", "weight_decay", "epochs", "seed"]}
+
+    xgb_path = PRED_DIR / "xgb_val_folds.csv"
+    if not xgb_path.exists():
+        raise FileNotFoundError(
+            f"XGBoost validation predictions not found: {xgb_path}. Run notebook 06_xgboost first."
+        )
+
+    if verbose:
+        print("Fitting the LSTM to produce 2013 validation forecasts...")
+    t0 = time.time()
+    lstm_pred = LSTMForecaster(**params).fit(X[tr], y[tr], pm_t[tr]).predict(X[ve], pm_t[ve])
+    lstm_val = pd.Series(lstm_pred, index=index[ve], name="lstm")
+    fit_time = time.time() - t0
+
+    xv = pd.read_csv(xgb_path, parse_dates=["issue_time"]).set_index("issue_time")
+    v = xv.join(lstm_val).dropna()                         # align on common issuance hours
+    yv = v["y_true"].to_numpy()
+
+    e_xgb, e_lstm = yv - v["xgboost"].to_numpy(), yv - v["lstm"].to_numpy()
+    corr = float(np.corrcoef(e_xgb, e_lstm)[0, 1])
+
+    w = best_blend_weight(yv, v["xgboost"], v["lstm"])
+    hyb = blend(v["xgboost"], v["lstm"], w)
+
+    rows = [
+        {"Model": "XGBoost", **metrics(yv, v["xgboost"])},
+        {"Model": "LSTM", **metrics(yv, v["lstm"])},
+        {"Model": "Hybrid", **metrics(yv, hyb)},
+    ]
+    table = pd.DataFrame(rows)[["Model", "n", "MAE", "RMSE", "R2"]]
+    if verbose:
+        print(f"LSTM fit in {fit_time:.2f}s; blended over {len(v):,} common validation hours.")
+        print(f"Validation error correlation (XGBoost, LSTM): {corr:.3f}")
+        print(f"Fitted blend weight: {w:.3f} on XGBoost, {1 - w:.3f} on LSTM.")
+        frozen_path = METRICS_DIR / "hybrid_weight.json"
+        if frozen_path.exists():
+            frozen = json.loads(frozen_path.read_text())
+            print(f"(Frozen weight from notebook 11: {frozen['w_xgb']} XGBoost; GPU runs vary slightly.)")
+        print("\nValidation 2013 Performance (Common Evaluation Set):")
+        print(table.to_string(index=False))
+        print()
+    return table
+
+
 def main():
     parser = argparse.ArgumentParser(description="Air Quality Forecasting CLI Pipeline")
     parser.add_argument(
         "--stage",
-        choices=["validate", "features", "baselines", "xgboost", "all"],
+        choices=["validate", "features", "baselines", "xgboost", "lstm", "hybrid", "all"],
         default="all",
-        help="Pipeline stage to execute (default: all)",
+        help="Pipeline stage to execute (default: all). 'all' runs validate, "
+             "baselines and xgboost; 'lstm' and 'hybrid' are explicit opt-in stages.",
     )
     parser.add_argument(
         "--data-path",
@@ -176,6 +334,12 @@ def main():
 
     if args.stage in ("xgboost", "all"):
         run_xgboost(df, X=X, verbose=True)
+
+    if args.stage == "lstm":
+        run_lstm(df, verbose=True)
+
+    if args.stage == "hybrid":
+        run_hybrid(df, verbose=True)
 
 
 if __name__ == "__main__":
